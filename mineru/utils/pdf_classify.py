@@ -27,9 +27,7 @@ SUSPICIOUS_CJK_72XX_START = 0x7280
 SUSPICIOUS_CJK_72XX_END = 0x72DF
 SUSPICIOUS_CJK_72XX_COUNT_THRESHOLD = 30
 SUSPICIOUS_CJK_72XX_CJK_RATIO_THRESHOLD = 0.026
-SUSPICIOUS_CJK_72XX_WHITELIST = set(
-    "犀犁犄犊犒犟犬犯状犷犹狂狄狈狐狗狙狞"
-)
+SUSPICIOUS_CJK_72XX_WHITELIST = set("犀犁犄犊犒犟犬犯状犷犹狂狄狈狐狗狙狞")
 ASCII_PUNCT_CHARS = set("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
 ASCII_PUNCT_RUN_MIN_LENGTH = 4
 SUSPICIOUS_ASCII_PUNCT_MIN_TEXT_CHARS = 100
@@ -77,13 +75,7 @@ _PRIVATE_USE_AREA_END = 0xF8FF
 
 
 def _is_disallowed_control_unicode(unicode_code: int) -> bool:
-    return (
-        (
-            0 <= unicode_code < 32
-            or 127 <= unicode_code <= 159
-        )
-        and unicode_code not in _ALLOWED_CONTROL_CODES
-    )
+    return (0 <= unicode_code < 32 or 127 <= unicode_code <= 159) and unicode_code not in _ALLOWED_CONTROL_CODES
 
 
 def classify(pdf_bytes):
@@ -121,19 +113,12 @@ def classify(pdf_bytes):
                 return "ocr"
 
             text_samples = _collect_pdfium_text_samples(pdf, page_indices)
-            avg_cleaned_chars_per_page = _get_avg_cleaned_chars_per_page_from_samples(
-                text_samples
-            )
+            avg_cleaned_chars_per_page = _get_avg_cleaned_chars_per_page_from_samples(text_samples)
             if avg_cleaned_chars_per_page < CHARS_THRESHOLD:
                 return "ocr"
 
-            unicode_map_error_signal = _get_unicode_map_error_signal_from_samples(
-                text_samples
-            )
-            if (
-                unicode_map_error_signal["unicode_map_error_ratio"]
-                >= UNICODE_MAP_ERROR_RATIO_THRESHOLD
-            ):
+            unicode_map_error_signal = _get_unicode_map_error_signal_from_samples(text_samples)
+            if unicode_map_error_signal["unicode_map_error_ratio"] >= UNICODE_MAP_ERROR_RATIO_THRESHOLD:
                 logger.debug(
                     "Classify PDF as OCR due to PDFium Unicode map errors: "
                     f"errors={unicode_map_error_signal['unicode_map_error_count']}, "
@@ -162,15 +147,10 @@ def classify(pdf_bytes):
             total_chars = text_quality_signal["total_chars"]
             abnormal_ratio = text_quality_signal["abnormal_ratio"]
 
-            if (
-                total_chars >= TEXT_QUALITY_MIN_CHARS
-                and abnormal_ratio >= TEXT_QUALITY_BAD_THRESHOLD
-            ):
+            if total_chars >= TEXT_QUALITY_MIN_CHARS and abnormal_ratio >= TEXT_QUALITY_BAD_THRESHOLD:
                 return "ocr"
 
-            cross_script_signal = _get_cross_script_text_signal_from_samples(
-                text_samples
-            )
+            cross_script_signal = _get_cross_script_text_signal_from_samples(text_samples)
             if cross_script_signal["triggered"]:
                 logger.debug(
                     "Classify PDF as OCR due to suspicious cross-script text: "
@@ -184,10 +164,8 @@ def classify(pdf_bytes):
 
             u72xx_signal = _get_u72xx_text_signal_from_samples(text_samples)
             if (
-                u72xx_signal["u72xx_count"]
-                >= SUSPICIOUS_CJK_72XX_COUNT_THRESHOLD
-                and u72xx_signal["u72xx_cjk_ratio"]
-                >= SUSPICIOUS_CJK_72XX_CJK_RATIO_THRESHOLD
+                u72xx_signal["u72xx_count"] >= SUSPICIOUS_CJK_72XX_COUNT_THRESHOLD
+                and u72xx_signal["u72xx_cjk_ratio"] >= SUSPICIOUS_CJK_72XX_CJK_RATIO_THRESHOLD
             ):
                 logger.debug(
                     "Classify PDF as OCR due to suspicious U+7280-U+72DF text: "
@@ -196,9 +174,7 @@ def classify(pdf_bytes):
                 )
                 return "ocr"
 
-            ascii_punct_signal = _get_sampled_ascii_punct_signal_from_samples(
-                text_samples
-            )
+            ascii_punct_signal = _get_sampled_ascii_punct_signal_from_samples(text_samples)
             if ascii_punct_signal["triggered"]:
                 logger.debug(
                     "Classify PDF as OCR due to suspicious sampled-page ASCII punctuation "
@@ -210,10 +186,7 @@ def classify(pdf_bytes):
                 )
                 return "ocr"
 
-            if (
-                get_high_image_coverage_ratio_pdfium(pdf, page_indices)
-                >= HIGH_IMAGE_COVERAGE_THRESHOLD
-            ):
+            if get_high_image_coverage_ratio_pdfium(pdf, page_indices) >= HIGH_IMAGE_COVERAGE_THRESHOLD:
                 return "ocr"
 
     except Exception as e:
@@ -308,9 +281,7 @@ def _collect_pdfium_text_sample_from_page(page_index, page):
             if pdfium_c.FPDFText_HasUnicodeMapError(text_page, char_index):
                 unicode_map_error_count += 1
 
-            font_name = _normalize_pdf_font_name(
-                _get_pdfium_char_font_name(text_page, char_index)
-            )
+            font_name = _normalize_pdf_font_name(_get_pdfium_char_font_name(text_page, char_index))
             if font_name:
                 font_name_counts[font_name] = font_name_counts.get(font_name, 0) + 1
 
@@ -339,9 +310,7 @@ def _collect_pdfium_text_samples(pdf_doc, page_indices):
             page = None
             try:
                 page = pdf_doc[page_index]
-                text_samples.append(
-                    _collect_pdfium_text_sample_from_page(page_index, page)
-                )
+                text_samples.append(_collect_pdfium_text_sample_from_page(page_index, page))
             finally:
                 close_pdfium_child(page)
 
@@ -380,12 +349,7 @@ def _get_text_quality_signal_from_samples(text_samples):
         control_char_count += text_sample["control_char_count"]
         private_use_char_count += text_sample["private_use_char_count"]
 
-    abnormal_chars = (
-        null_char_count
-        + replacement_char_count
-        + control_char_count
-        + private_use_char_count
-    )
+    abnormal_chars = null_char_count + replacement_char_count + control_char_count + private_use_char_count
 
     abnormal_ratio = 0.0
     if total_chars > 0:
@@ -476,10 +440,7 @@ def _get_cid_font_usage_signal_from_samples(text_samples, cid_font_signal):
     page_fonts = cid_font_signal.get("page_fonts") or {}
     for text_sample in text_samples:
         page_index = text_sample.get("page_index")
-        cid_font_names = {
-            _normalize_pdf_font_name(font_name)
-            for font_name in page_fonts.get(page_index, set())
-        }
+        cid_font_names = {_normalize_pdf_font_name(font_name) for font_name in page_fonts.get(page_index, set())}
         cid_font_names.discard("")
         if not cid_font_names:
             continue
@@ -490,9 +451,7 @@ def _get_cid_font_usage_signal_from_samples(text_samples, cid_font_signal):
 
         font_name_counts = text_sample.get("font_name_counts") or {}
         matched_font_names = cid_font_names.intersection(font_name_counts)
-        cid_font_char_count = sum(
-            font_name_counts[font_name] for font_name in matched_font_names
-        )
+        cid_font_char_count = sum(font_name_counts[font_name] for font_name in matched_font_names)
 
         cid_font_usage_ratio = cid_font_char_count / total_chars
         signal = {
@@ -503,10 +462,7 @@ def _get_cid_font_usage_signal_from_samples(text_samples, cid_font_signal):
             "total_chars": total_chars,
             "cid_font_usage_ratio": cid_font_usage_ratio,
         }
-        if (
-            cid_font_char_count >= CID_FONT_USAGE_COUNT_THRESHOLD
-            and cid_font_usage_ratio >= CID_FONT_USAGE_RATIO_THRESHOLD
-        ):
+        if cid_font_char_count >= CID_FONT_USAGE_COUNT_THRESHOLD and cid_font_usage_ratio >= CID_FONT_USAGE_RATIO_THRESHOLD:
             signal["triggered"] = True
             return signal
 
@@ -561,11 +517,7 @@ def _get_cross_script_text_signal_from_samples(text_samples):
     if total_chars > 0:
         suspicious_ratio = suspicious_chars / total_chars
 
-    dense_script_count = sum(
-        1
-        for count in script_counts.values()
-        if count >= SUSPICIOUS_CROSS_SCRIPT_SCRIPT_MIN_CHARS
-    )
+    dense_script_count = sum(1 for count in script_counts.values() if count >= SUSPICIOUS_CROSS_SCRIPT_SCRIPT_MIN_CHARS)
     top_scripts = sorted(
         script_counts.items(),
         key=lambda item: (-item[1], item[0]),
@@ -601,9 +553,7 @@ def _get_u72xx_text_signal_from_samples(text_samples):
             if 0x4E00 <= unicode_code <= 0x9FFF:
                 cjk_chars += 1
             if (
-                SUSPICIOUS_CJK_72XX_START
-                <= unicode_code
-                <= SUSPICIOUS_CJK_72XX_END
+                SUSPICIOUS_CJK_72XX_START <= unicode_code <= SUSPICIOUS_CJK_72XX_END
                 and char not in SUSPICIOUS_CJK_72XX_WHITELIST
             ):
                 u72xx_count += 1
@@ -674,12 +624,8 @@ def _get_sampled_ascii_punct_signal_from_samples(text_samples):
         page_index = text_sample.get("page_index")
         cleaned_text = text_sample["cleaned_text"]
         cleaned_text_chars = len(cleaned_text)
-        ascii_punct_count = sum(
-            1 for char in cleaned_text if char in ASCII_PUNCT_CHARS
-        )
-        ascii_punct_run_chars, ascii_punct_run_char_types = (
-            _get_ascii_punct_run_signal(cleaned_text)
-        )
+        ascii_punct_count = sum(1 for char in cleaned_text if char in ASCII_PUNCT_CHARS)
+        ascii_punct_run_chars, ascii_punct_run_char_types = _get_ascii_punct_run_signal(cleaned_text)
 
         ascii_punct_ratio = 0.0
         punct_run_ratio = 0.0
@@ -752,9 +698,7 @@ def get_cid_font_signal_pypdf(pdf_bytes, page_indices):
                 and not has_to_unicode
             ):
                 font_name = font.get("/BaseFont") or font_key
-                page_fonts.setdefault(page_index, set()).add(
-                    _normalize_pdf_font_name(font_name)
-                )
+                page_fonts.setdefault(page_index, set()).add(_normalize_pdf_font_name(font_name))
 
     return {
         "triggered": bool(page_fonts),
@@ -782,23 +726,20 @@ def get_high_image_coverage_ratio_pdfium(pdf_doc, page_indices):
             try:
                 page = pdf_doc[page_index]
                 page_bbox = page.get_bbox()
-                page_area = abs(
-                    (page_bbox[2] - page_bbox[0]) * (page_bbox[3] - page_bbox[1])
-                )
+                page_area = abs((page_bbox[2] - page_bbox[0]) * (page_bbox[3] - page_bbox[1]))
                 image_area = 0.0
 
-                for page_object in page.get_objects(
-                    filter=[pdfium_c.FPDF_PAGEOBJ_IMAGE], max_depth=3
-                ):
+                for page_object in page.get_objects(filter=[pdfium_c.FPDF_PAGEOBJ_IMAGE], max_depth=3):
                     try:
-                        left, bottom, right, top = page_object.get_pos()
-                        image_area += max(0.0, right - left) * max(0.0, top - bottom)
+                        try:
+                            left, bottom, right, top = page_object.get_pos()
+                            image_area += max(0.0, right - left) * max(0.0, top - bottom)
+                        except AttributeError:
+                            pass
                     finally:
                         close_pdfium_child(page_object)
 
-                coverage_ratio = (
-                    min(image_area / page_area, 1.0) if page_area > 0 else 0.0
-                )
+                coverage_ratio = min(image_area / page_area, 1.0) if page_area > 0 else 0.0
                 if coverage_ratio >= HIGH_IMAGE_COVERAGE_THRESHOLD:
                     high_image_coverage_pages += 1
             finally:

@@ -12,8 +12,13 @@ import pypdfium2 as pdfium
 from loguru import logger
 from tqdm import tqdm
 
-from .utils import enable_custom_logits_processors, set_default_gpu_memory_utilization, set_default_batch_size, \
-    set_lmdeploy_backend, mod_kwargs_by_device_type
+from .utils import (
+    enable_custom_logits_processors,
+    set_default_gpu_memory_utilization,
+    set_default_batch_size,
+    set_lmdeploy_backend,
+    mod_kwargs_by_device_type,
+)
 from .model_output_to_middle_json import (
     append_page_blocks_to_middle_json,
     finalize_middle_json,
@@ -74,11 +79,19 @@ class ModelSingleton:
                 max_retries = kwargs.get("max_retries", 3)  # for http-client backend only
                 retry_backoff_factor = kwargs.get("retry_backoff_factor", 0.5)  # for http-client backend only
                 # 从kwargs中移除这些参数，避免传递给不相关的初始化函数
-                for param in ["batch_size", "max_concurrency", "http_timeout", "server_headers", "max_retries", "retry_backoff_factor"]:
+                for param in [
+                    "batch_size",
+                    "max_concurrency",
+                    "http_timeout",
+                    "server_headers",
+                    "max_retries",
+                    "retry_backoff_factor",
+                    "local_gpus",
+                ]:
                     if param in kwargs:
                         del kwargs[param]
                 if backend not in ["http-client"] and not model_path:
-                    model_path = auto_download_and_get_model_root_path("/","vlm")
+                    model_path = auto_download_and_get_model_root_path("/", "vlm")
                 if backend == "transformers":
                     try:
                         from transformers import (
@@ -110,9 +123,10 @@ class ModelSingleton:
                     if not mlx_supported:
                         raise EnvironmentError("mlx-engine backend is only supported on macOS 13.5+ with Apple Silicon.")
                     from mineru_vl_utils.mlx_compat import load_mlx_model
+
                     model, processor = load_mlx_model(model_path)
                 else:
-                    if os.getenv('OMP_NUM_THREADS') is None:
+                    if os.getenv("OMP_NUM_THREADS") is None:
                         os.environ["OMP_NUM_THREADS"] = "1"
 
                     if backend == "vllm-engine":
@@ -129,7 +143,8 @@ class ModelSingleton:
                                     kwargs["compilation_config"] = json.loads(kwargs["compilation_config"])
                                 except json.JSONDecodeError:
                                     logger.warning(
-                                        f"Failed to parse compilation_config as JSON: {kwargs['compilation_config']}")
+                                        f"Failed to parse compilation_config as JSON: {kwargs['compilation_config']}"
+                                    )
                                     del kwargs["compilation_config"]
                         if "gpu_memory_utilization" not in kwargs:
                             kwargs["gpu_memory_utilization"] = set_default_gpu_memory_utilization()
@@ -137,6 +152,7 @@ class ModelSingleton:
                             kwargs["model"] = model_path
                         if enable_custom_logits_processors() and ("logits_processors" not in kwargs):
                             from mineru_vl_utils import MinerULogitsProcessor
+
                             kwargs["logits_processors"] = [MinerULogitsProcessor]
                         # 使用kwargs为 vllm初始化参数
                         vllm_llm = vllm.LLM(**kwargs)
@@ -161,7 +177,8 @@ class ModelSingleton:
                                     kwargs["compilation_config"] = CompilationConfig(**config_dict)
                                 except (json.JSONDecodeError, TypeError) as e:
                                     logger.warning(
-                                        f"Failed to parse compilation_config: {kwargs['compilation_config']}, error: {e}")
+                                        f"Failed to parse compilation_config: {kwargs['compilation_config']}, error: {e}"
+                                    )
                                     del kwargs["compilation_config"]
                         if "gpu_memory_utilization" not in kwargs:
                             kwargs["gpu_memory_utilization"] = set_default_gpu_memory_utilization()
@@ -169,6 +186,7 @@ class ModelSingleton:
                             kwargs["model"] = model_path
                         if enable_custom_logits_processors() and ("logits_processors" not in kwargs):
                             from mineru_vl_utils import MinerULogitsProcessor
+
                             kwargs["logits_processors"] = [MinerULogitsProcessor]
                         # 使用kwargs为 vllm初始化参数
                         vllm_async_llm = AsyncLLM.from_engine_args(AsyncEngineArgs(**kwargs))
@@ -207,12 +225,13 @@ class ModelSingleton:
                         else:
                             raise ValueError(f"Unsupported lmdeploy backend: {lm_backend}")
 
-                        log_level = 'ERROR'
+                        log_level = "ERROR"
                         from lmdeploy.utils import get_logger
-                        lm_logger = get_logger('lmdeploy')
+
+                        lm_logger = get_logger("lmdeploy")
                         lm_logger.setLevel(log_level)
-                        if os.getenv('TM_LOG_LEVEL') is None:
-                            os.environ['TM_LOG_LEVEL'] = log_level
+                        if os.getenv("TM_LOG_LEVEL") is None:
+                            os.environ["TM_LOG_LEVEL"] = log_level
 
                         lmdeploy_engine = VLAsyncEngine(
                             model_path,
@@ -380,9 +399,7 @@ def _maybe_enable_serial_execution(
     predictor: MinerUClient,
     backend: str | None = None,
 ) -> MinerUClient:
-    if _predictor_uses_mlx(predictor, backend) and not hasattr(
-        predictor, "_mineru_execution_lock"
-    ):
+    if _predictor_uses_mlx(predictor, backend) and not hasattr(predictor, "_mineru_execution_lock"):
         predictor._mineru_execution_lock = threading.Lock()
     return predictor
 
@@ -430,9 +447,7 @@ def doc_analyze(
     image_analysis: bool = True,
     **kwargs,
 ):
-    client_side_output_generation = bool(
-        kwargs.pop("client_side_output_generation", False)
-    )
+    client_side_output_generation = bool(kwargs.pop("client_side_output_generation", False))
     if predictor is None:
         predictor = ModelSingleton().get_model(backend, model_path, server_url, **kwargs)
     predictor = _maybe_enable_serial_execution(predictor, backend)
@@ -445,14 +460,10 @@ def doc_analyze(
         page_count = get_pdfium_document_page_count(pdf_doc)
         configured_window_size = get_processing_window_size(default=64)
         effective_window_size = min(page_count, configured_window_size) if page_count else 0
-        total_windows = (
-            (page_count + effective_window_size - 1) // effective_window_size
-            if effective_window_size
-            else 0
-        )
+        total_windows = (page_count + effective_window_size - 1) // effective_window_size if effective_window_size else 0
         logger.info(
-            f'VLM processing-window run. page_count={page_count}, '
-            f'window_size={configured_window_size}, total_windows={total_windows}'
+            f"VLM processing-window run. page_count={page_count}, "
+            f"window_size={configured_window_size}, total_windows={total_windows}"
         )
 
         infer_start = time.time()
@@ -471,9 +482,9 @@ def doc_analyze(
                 try:
                     images_pil_list = [image_dict["img_pil"] for image_dict in images_list]
                     logger.info(
-                        f'VLM processing window {window_index + 1}/{total_windows}: '
-                        f'pages {window_start + 1}-{window_end + 1}/{page_count} '
-                        f'({len(images_pil_list)} pages)'
+                        f"VLM processing window {window_index + 1}/{total_windows}: "
+                        f"pages {window_start + 1}-{window_end + 1}/{page_count} "
+                        f"({len(images_pil_list)} pages)"
                     )
                     with predictor_execution_guard(predictor):
                         window_results = predictor.batch_two_step_extract(
@@ -507,8 +518,7 @@ def doc_analyze(
         infer_time = round(time.time() - infer_start, 2)
         if infer_time > 0 and page_count > 0:
             logger.debug(
-                f"processing-window infer finished, cost: {infer_time}, "
-                f"speed: {round(len(results) / infer_time, 3)} page/s"
+                f"processing-window infer finished, cost: {infer_time}, speed: {round(len(results) / infer_time, 3)} page/s"
             )
         if not client_side_output_generation:
             finalize_middle_json(middle_json["pdf_info"])
@@ -530,9 +540,7 @@ async def aio_doc_analyze(
     image_analysis: bool = True,
     **kwargs,
 ):
-    client_side_output_generation = bool(
-        kwargs.pop("client_side_output_generation", False)
-    )
+    client_side_output_generation = bool(kwargs.pop("client_side_output_generation", False))
     if predictor is None:
         predictor = await _get_model_async(backend, model_path, server_url, **kwargs)
     predictor = _maybe_enable_serial_execution(predictor, backend)
@@ -545,14 +553,10 @@ async def aio_doc_analyze(
         page_count = get_pdfium_document_page_count(pdf_doc)
         configured_window_size = get_processing_window_size(default=64)
         effective_window_size = min(page_count, configured_window_size) if page_count else 0
-        total_windows = (
-            (page_count + effective_window_size - 1) // effective_window_size
-            if effective_window_size
-            else 0
-        )
+        total_windows = (page_count + effective_window_size - 1) // effective_window_size if effective_window_size else 0
         logger.info(
-            f'VLM processing-window run. page_count={page_count}, '
-            f'window_size={configured_window_size}, total_windows={total_windows}'
+            f"VLM processing-window run. page_count={page_count}, "
+            f"window_size={configured_window_size}, total_windows={total_windows}"
         )
 
         infer_start = time.time()
@@ -570,9 +574,9 @@ async def aio_doc_analyze(
                 try:
                     images_pil_list = [image_dict["img_pil"] for image_dict in images_list]
                     logger.info(
-                        f'VLM processing window {window_index + 1}/{total_windows}: '
-                        f'pages {window_start + 1}-{window_end + 1}/{page_count} '
-                        f'({len(images_pil_list)} pages)'
+                        f"VLM processing window {window_index + 1}/{total_windows}: "
+                        f"pages {window_start + 1}-{window_end + 1}/{page_count} "
+                        f"({len(images_pil_list)} pages)"
                     )
                     async with aio_predictor_execution_guard(predictor):
                         window_results = await predictor.aio_batch_two_step_extract(
@@ -606,8 +610,7 @@ async def aio_doc_analyze(
         infer_time = round(time.time() - infer_start, 2)
         if infer_time > 0 and page_count > 0:
             logger.debug(
-                f"processing-window infer finished, cost: {infer_time}, "
-                f"speed: {round(len(results) / infer_time, 3)} page/s"
+                f"processing-window infer finished, cost: {infer_time}, speed: {round(len(results) / infer_time, 3)} page/s"
             )
         if not client_side_output_generation:
             await asyncio.to_thread(finalize_middle_json, middle_json["pdf_info"])
